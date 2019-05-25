@@ -7,6 +7,19 @@ namespace NazariehProject_96522204_96521173
 {
     class Program
     {
+        static void Main()
+        {
+            var data = ReadFile();
+            var nfa = MakeNFA(data, out string InitState, out HashSet<string> FinalState);
+
+            var dfa = ConvertToDFA(nfa, InitState, FinalState);
+
+
+            var dfaFinalStates = FinalStates(dfa, FinalState);
+            DFAMinimizer(dfa, dfaFinalStates, data[1].Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+
         public static string[] ReadFile()
         {
             List<string> SaveList = new List<string>();
@@ -84,9 +97,9 @@ namespace NazariehProject_96522204_96521173
             return NFA;
         }
 
-        public static void ConvertToDFA(Dictionary<string, Dictionary<string, List<string>>> NFA, string InitState, HashSet<string> FinalState)
+        public static List<State> ConvertToDFA(Dictionary<string, Dictionary<string, List<string>>> NFA, string InitState, HashSet<string> FinalState)
         {
-            var initstate = new State(InitState, new Dictionary<string, int>(), new List<string>() { InitState });
+            var initstate = new State("", new Dictionary<string, int>(), new List<string>() { InitState });
             var states = new List<State>();
             states.Add(initstate);
             
@@ -97,9 +110,16 @@ namespace NazariehProject_96522204_96521173
                 {
                     if (NFA[state.States[j]].ContainsKey("_"))
                     {
-                        state.States.AddRange(NFA[state.States[j]]["_"]);
+                        List<string> s = new List<string>();
+                        s.AddRange(NFA[state.States[j]]["_"]);
+                        for (int k = 0; k < s.Count; k++)
+                        {
+                            if(!state.States.Contains(s[k]))
+                                state.States.Add(s[k]);
+                        }
                     }
                 }
+
                 StateExists(states, state);
                 var nextStates = new Dictionary<string, State>();
                 foreach (var s in state.States)
@@ -110,11 +130,20 @@ namespace NazariehProject_96522204_96521173
                         {
                             if (nextStates.ContainsKey(ns.Key))
                             {
-                                nextStates[ns.Key].States.AddRange(ns.Value);
+                                List<string> nv = new List<string>();
+                                nv.AddRange(ns.Value);
+                                for (int j = 0; j < nv.Count; j++)
+                                {
+                                    if (!nextStates[ns.Key].States.Contains(nv[j]))
+                                    {
+                                        nextStates[ns.Key].States.Add(nv[j]);
+                                    }
+                                }
                             }
                             else
                             {
-                                nextStates.Add(ns.Key, new State("", new Dictionary<string, int>(), ns.Value));
+                                nextStates.Add(ns.Key, new State("", new Dictionary<string, int>(), new List<string>()));
+                                nextStates[ns.Key].States.AddRange(ns.Value);
                             }
                         }
                     }
@@ -122,10 +151,27 @@ namespace NazariehProject_96522204_96521173
 
                 foreach (var ns in nextStates)
                 {
-                    var index = StateExists(states, ns.Value);
+                    var st = new State(null, null, null);
+                    st = ns.Value;
+                    for (int j = 0; j < st.States.Count; j++)
+                    {
+                        if (NFA[st.States[j]].ContainsKey("_"))
+                        {
+                            List<string> s = new List<string>();
+                            s.AddRange(NFA[st.States[j]]["_"]);
+                            for (int k = 0; k < s.Count; k++)
+                            {
+                                if (!st.States.Contains(s[k]))
+                                    st.States.Add(s[k]);
+                            }
+                        }
+                    }
+
+                    var index = StateExists(states, st);
                     state.NextStates.Add(ns.Key, index);
                 }
             }
+            return states;
         }
 
         public static int StateExists(List<State> states, State state)
@@ -137,7 +183,7 @@ namespace NazariehProject_96522204_96521173
                     bool found = true;
                     for(int j = 0; j < state.States.Count; j++)
                     {
-                        if(state.States[j] != states[i].States[j])
+                        if(!states[i].States.Contains(state.States[j]))
                         {
                             found = false;
                         }
@@ -152,12 +198,26 @@ namespace NazariehProject_96522204_96521173
             return states.Count - 1;
         }
 
-        static void Main()
+        public static HashSet<int> FinalStates(List<State> DFA, HashSet<string> nfaFinalState)
         {
-            var data = ReadFile();
-            var nfa = MakeNFA(data, out string InitState, out HashSet<string> FinalStates);
+            HashSet<int> dfaFinalStates = new HashSet<int>();
+            for(int i = 0; i < DFA.Count; i++)
+            {
+                foreach(var state in DFA[i].States)
+                {
+                    if(nfaFinalState.Contains(state))
+                    {
+                        dfaFinalStates.Add(i);
+                        break;
+                    }
+                }
+            }
+            return dfaFinalStates;
+        }
 
-            ConvertToDFA(nfa, InitState, FinalStates);
+        public static void DFAMinimizer (List<State> DFA, HashSet<int> dfaFinalStates,string[] Alphabet)
+        {
+
         }
     }
 }
