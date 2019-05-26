@@ -12,13 +12,67 @@ namespace NazariehProject_96522204_96521173
             var data = ReadFile();
             var nfa = MakeNFA(data, out string InitState, out HashSet<string> FinalState);
 
-            var dfa = ConvertToDFA(nfa, InitState, FinalState);
-
-
+            var dfa = ConvertToDFA(nfa, InitState, FinalState, data[1].Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries));//add trap
             var dfaFinalStates = FinalStates(dfa, FinalState);
-            DFAMinimizer(dfa, dfaFinalStates, data[1].Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
+            var dfaToString = DFAToString(dfa, dfaFinalStates, data[1]);
+
+            var minimizedDFA = DFAMinimizer(dfa, dfaFinalStates, data[1].Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
+            var minimizedToString = MinimizedToString(minimizedDFA, dfaFinalStates.ToList(), data[1]);
         }
 
+        public static string MinimizedToString(Tuple<List<Dictionary<string, int>>, int[]> dfa, List<int> finalStates, string alphabet)
+        {
+            var table = dfa.Item1;
+            var stateInSet = dfa.Item2;
+            string answer = "";
+            answer += table.Count + "\n";
+            answer += alphabet + "\n->";
+            for(int i = 0; i < finalStates.Count; i++)
+            {
+                finalStates[i] = stateInSet[finalStates[i]];
+            }
+            for (int i = 0; i < dfa.Item1.Count; i++)
+            {
+                foreach(var state in table[i])
+                {
+                    if (finalStates.Contains(stateInSet[i]))
+                    {
+                        answer += "*";
+                    }
+                    answer += "g" + stateInSet[i] + "," + state.Key + ",";
+                    if (finalStates.Contains(state.Value))
+                    {
+                        answer += "*";
+                    }
+                    answer += "g" + state.Value + "\n";
+                }
+            }
+            return answer;
+        }
+
+        public static string DFAToString(List<State> dfa, HashSet<int> finalStates, string alphabet)
+        {
+            string answer = "";
+            answer += dfa.Count + "\n";
+            answer += alphabet + "\n->";
+            for(int i = 0; i < dfa.Count; i++)
+            {
+                foreach(var state in dfa[i].NextStates)
+                {
+                    if(finalStates.Contains(i))
+                    {
+                        answer += "*";
+                    }
+                    answer += "q" + i + "," + state.Key + ","; 
+                    if(finalStates.Contains(state.Value))
+                    {
+                        answer += "*";
+                    }
+                    answer += "q" + state.Value + "\n";
+                }
+            }
+            return answer;
+        }
 
         public static string[] ReadFile()
         {
@@ -97,7 +151,7 @@ namespace NazariehProject_96522204_96521173
             return NFA;
         }
 
-        public static List<State> ConvertToDFA(Dictionary<string, Dictionary<string, List<string>>> NFA, string InitState, HashSet<string> FinalState)
+        public static List<State> ConvertToDFA(Dictionary<string, Dictionary<string, List<string>>> NFA, string InitState, HashSet<string> FinalState, string[] alphabet)
         {
             var initstate = new State("", new Dictionary<string, int>(), new List<string>() { InitState });
             var states = new List<State>();
@@ -171,6 +225,29 @@ namespace NazariehProject_96522204_96521173
                     state.NextStates.Add(ns.Key, index);
                 }
             }
+
+            
+            bool needTrap = false;
+            for(int i = 0; i < states.Count; i++)
+            {
+                foreach(var a in alphabet)
+                {
+                    if(!states[i].NextStates.ContainsKey(a))
+                    {
+                        states[i].NextStates.Add(a, states.Count);
+                        needTrap = true;
+                    }
+                }
+            }
+            if (needTrap)
+            {
+                states.Add(new State("", new Dictionary<string, int>(), new List<string>()));
+                var last = states.Count - 1;
+                foreach (var a in alphabet)
+                {
+                    states[last].NextStates.Add(a, last);
+                }
+            }
             return states;
         }
 
@@ -215,9 +292,114 @@ namespace NazariehProject_96522204_96521173
             return dfaFinalStates;
         }
 
-        public static void DFAMinimizer (List<State> DFA, HashSet<int> dfaFinalStates,string[] Alphabet)
+        public static Tuple< List<Dictionary<string, int>>, int[]> DFAMinimizer (List<State> DFA, HashSet<int> dfaFinalStates,string[] Alphabet)
         {
+            var sets = new List<List<int>>() { new List<int>()};
+            //create 2 sets for final states and nonfinal states
+            for(int i = 0; i < DFA.Count; i++)
+            {
+                if(dfaFinalStates.Contains(i))
+                {
+                    sets[0].Add(i);
+                }
+                else if(sets.Count == 1)
+                {
+                    sets.Add(new List<int>() { i });
+                }
+                else
+                {
+                    sets[1].Add(i);
+                }
+            }
 
+            var dfaTable = ConvertDFAtoTable(DFA);
+            var setsTable = new List<Dictionary<string, int>>();
+            var stateInSet = new int[DFA.Count];
+            while (true)
+            {
+                setsTable = new List<Dictionary<string, int>>();
+            //defines each state with each alphabet goes relates to which set
+                for (int i = 0; i < dfaTable.Count; i++)
+                {
+                    setsTable.Add(new Dictionary<string, int>());
+                    foreach (var a in Alphabet)
+                    {
+                        for (int j = 0; j < sets.Count; j++)
+                        {
+                            if (sets[j].Contains(dfaTable[i][a]))
+                            {
+                                setsTable[i].Add(a, j);
+                                break;
+                            }
+                        }
+                    }
+                }
+                var newSets = new List<List<int>>();
+                //makes new sets out of old sets
+                for (int i = 0; i < sets.Count; i++)
+                {
+                    newSets.Add(new List<int>() { sets[i][0] });
+                    stateInSet[sets[i][0]] = newSets.Count - 1;
+                    for (int j = 1; j < sets[i].Count; j++)
+                    {
+                        bool isMatched = true;
+                        for (int k = j - 1; k >= 0; k--)
+                        {
+                            isMatched = true;
+                            foreach(var a in Alphabet)
+                            {
+                                if (setsTable[sets[i][j]][a] != setsTable[sets[i][k]][a])
+                                {
+                                    isMatched = false;
+                                    break;
+                                }
+                            }
+                            if (isMatched)
+                            {
+                                newSets[stateInSet[sets[i][k]]].Add(sets[i][j]);
+                                stateInSet[sets[i][j]] = stateInSet[sets[i][k]];
+                                break;
+                            }
+                        }
+                        if (!isMatched)
+                        {
+                            newSets.Add(new List<int>() { sets[i][j] });
+                            stateInSet[sets[i][j]] = newSets.Count - 1;
+                        }
+                    }
+                }
+
+                if(sets.Count == newSets.Count)
+                {
+                    break;
+                }
+
+                sets = newSets;
+            }
+
+            for(int i = 0; i < sets.Count; i++)
+            {
+                for(int j = 1; j < sets[i].Count; j++)
+                {
+                    setsTable.RemoveAt(sets[i][j]);
+                }
+            }
+
+            return new Tuple<List<Dictionary<string, int>>, int[]>(setsTable,stateInSet);
+        }
+        
+        public static List<Dictionary<string, int>> ConvertDFAtoTable(List<State> DFA)
+        {
+            List<Dictionary<string, int>> dfaTable = new List<Dictionary<string, int>>();
+            for(int i = 0; i < DFA.Count; i++)
+            {
+                dfaTable.Add(new Dictionary<string, int>());
+                foreach(var a in DFA[i].NextStates)
+                {
+                    dfaTable[i].Add(a.Key, a.Value);
+                }
+            }
+            return dfaTable;
         }
     }
 }
